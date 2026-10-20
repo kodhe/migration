@@ -1,17 +1,17 @@
 # Kodhe Migration
 
-Package versioning skema database hasil refaktor library *Migrations* (CI Bonfire). Namespace `Kodhe\Framework\Migration`. Menyediakan dua kelas:
+A database schema versioning package — a refactored version of the *Migrations* library (CI Bonfire) under the `Kodhe\Framework\Migration` namespace. It provides two classes:
 
-- `Migration` — runner modern berbasis tabel `schema_version`, mendukung migrasi **core** dan **per-module** (`app_<module>_`), bisa dijalankan otomatis saat page-load (`autoLatest()`) atau manual per versi.
-- `Legacy` — runner klasik bergaya CI3 (`application/db/migrations/` + konfig `$config['migration_*']`) untuk proyek yang sudah punya file migrasi lama.
+- `Migration` — a modern runner based on the `schema_version` table, supporting **core** and **per-module** (`app_<module>_`) migrations; it can run automatically on page load (`autoLatest()`) or manually per version.
+- `Legacy` — a classic CI3-style runner (`application/db/migrations/` + `$config['migration_*']` config) for projects that already have existing migration files.
 
-## Instalasi
+## Installation
 
 ```bash
 composer require kodhe/migration
 ```
 
-Persyaratan: PHP >= 8.1, koneksi database aktif (pakai query builder `kodhe/database` di dalam kelas abstrak `Migration` bawaan CI), serta konstanta CI (`BASEPATH`, `APPPATH`).
+Requirements: PHP >= 8.1, an active database connection (uses the `kodhe/database` query builder inside CI's abstract `Migration` class), and the CI constants (`BASEPATH`, `APPPATH`).
 
 ## Quick Start
 
@@ -22,37 +22,37 @@ declare(strict_types=1);
 
 use Kodhe\Framework\Migration\Migration;
 
-// Dari config CI: $config['migrations_path'] = APPPATH.'Migration';
+// From CI config: $config['migrations_path'] = APPPATH.'Migration';
 $migration = new Migration(['migrations_path' => APPPATH . 'Migration']);
 
-// Jalankan semua migrasi core hingga versi terbaru
+// Run all core migrations up to the latest version
 $migration->install();
 
-// Cek hasil
-echo $migration->getVersion();          // versi aktif sekarang
-echo $migration->getVersion('', true);  // versi terbaru yang tersedia
+// Check the result
+echo $migration->getVersion();          // currently active version
+echo $migration->getVersion('', true);  // latest available version
 ```
 
-## Struktur Direktori
+## Directory Structure
 
 ```
 src/
-├── Migration.php   # Runner utama (tabel schema_version, modul-aware)
-└── Legacy.php      # Runner kompatibel CI3 (db/migrations + migration_enabled)
+├── Migration.php   # Main runner (schema_version table, module-aware)
+└── Legacy.php      # CI3-compatible runner (db/migrations + migration_enabled)
 ```
 
-## Penggunaan
+## Usage
 
-### 1. Membuat file migrasi
+### 1. Creating migration files
 
-File di `application/Migration/` dengan penomoran berurutan:
+Files go in `application/Migration/` with sequential numbering:
 
 ```
 001_install_initial_schema.php
 002_add_user_avatar.php
 ```
 
-Isinya kelas yang meng-extend `Migration` abstrak CI dan wajib punya `up()`/`down()`:
+Each file contains a class extending CI's abstract `Migration` and must define `up()`/`down()`:
 
 ```php
 <?php // 002_add_user_avatar.php
@@ -73,82 +73,82 @@ class Migration_add_user_avatar extends CI_Migration
 }
 ```
 
-### 2. Migrasi per modul (app migrations)
+### 2. Per-module migrations (app migrations)
 
-Nama file diawali `app_<module>_<nomor>_<deskripsi>` → runner memisahkan versi tiap modul:
+File names start with `app_<module>_<number>_<description>` → the runner tracks a separate version per module:
 
 ```php
-$migration->install('blog');            // hanya modul blog
-$migration->version(3, 'blog');         // ke versi 3 milik modul blog
+$migration->install('blog');            // only the blog module
+$migration->version(3, 'blog');         // to blog module version 3
 $versions = $migration->getModuleVersions(); // ['' => 5, 'blog' => 3, ...]
 ```
 
-### 3. Auto-migrate saat aplikasi load
+### 3. Auto-migrate on application load
 
 ```php
 // application/config/*.php
 $config['migrate']['auto_core'] = TRUE;
 $config['migrate']['auto_app']  = TRUE;
 
-// Di hook/bootstrap:
+// In a hook/bootstrap:
 $migration->autoLatest();
 ```
 
-### 4. SQL murni tanpa kelas migrasi
+### 4. Plain SQL without a migration class
 
 ```php
 $migration->doSqlMigration("ALTER TABLE users ADD COLUMN token VARCHAR(64) NULL");
 ```
 
-### 5. Menangani error
+### 5. Handling errors
 
 ```php
 if ($migration->version(4) === false) {
-    echo $migration->getErrorMessage();  // gabungan pesan
-    print_r($migration->getErrors());    // array mentah
+    echo $migration->getErrorMessage();  // combined message
+    print_r($migration->getErrors());    // raw array
 }
 ```
 
-### 6. Mode Legacy (kompatibel CI3 penuh)
+### 6. Legacy mode (fully CI3 compatible)
 
 ```php
 use Kodhe\Framework\Migration\Legacy;
 
-// Butuh config CI3 standar:
+// Requires standard CI3 config:
 // $config['migration_enabled'], ['migration_type'], ['migration_path'],
 // ['migration_table'], ['migration_auto_latest'], ['migration_version']
 $m = new Legacy();
-$m->latest();                 // naik ke versi terbaru
-$m->current();                // versi aktif
-$m->version(2);               // pindah ke versi 2 (naik/turun via up/down)
+$m->latest();                 // upgrade to the latest version
+$m->current();                // active version
+$m->version(2);               // move to version 2 (up/down via up()/down())
 echo $m->error_string();
 ```
 
-## Referensi API (`Migration`)
+## API Reference (`Migration`)
 
-| Method | Keterangan |
+| Method | Description |
 |---|---|
-| `__construct(array $params)` | Opsional: `migrations_path`; buat tabel `schema_version` bila belum ada |
-| `autoLatest()` | Jalankan auto-migrate core/app sesuai config `migrate` |
-| `install($type = '')` | Naikkan ke versi terbaru untuk tipe/modul tertentu (`''` = core) |
-| `version($version, $type = '')` | Pindah ke versi spesifik (maju/mundur) |
-| `doSqlMigration($sql)` | Eksekusi statement SQL langsung & catat versinya |
-| `getVersion($type, $getLatest = false)` | Versi aktif / versi terbaru tersedia |
-| `getAvailableVersions($type)` | Daftar semua nomor versi di folder |
-| `getModuleVersions()` | Peta versi per modul |
-| `getErrors()` / `getErrorMessage()` | Ambil error |
-| `setVerbose($state)` | Cetak progres ke output |
+| `__construct(array $params)` | Optional: `migrations_path`; creates the `schema_version` table if missing |
+| `autoLatest()` | Runs core/app auto-migration according to the `migrate` config |
+| `install($type = '')` | Upgrades to the latest version for a given type/module (`''` = core) |
+| `version($version, $type = '')` | Moves to a specific version (forward/backward) |
+| `doSqlMigration($sql)` | Executes a raw SQL statement directly & records its version |
+| `getVersion($type, $getLatest = false)` | Active version / latest available version |
+| `getAvailableVersions($type)` | Lists all version numbers in the folder |
+| `getModuleVersions()` | Version map per module |
+| `getErrors()` / `getErrorMessage()` | Retrieve errors |
+| `setVerbose($state)` | Prints progress to the output |
 
-## Kompatibilitas CodeIgniter 3
+## CodeIgniter 3 Compatibility
 
-Perilaku mengikuti CI_Bonfire Migrations; `Legacy` meniru `CI_Migration` asli. Tabel pelacak bernama `schema_version` (bukan `ci_migrations`) — saat bermigrasi dari CI3, sesuaikan nama tabel lewat properti `$migrationsTable`.
+Behavior follows CI_Bonfire Migrations; `Legacy` mimics the original `CI_Migration`. The tracking table is named `schema_version` (not `ci_migrations`) — when migrating from CI3, adjust the table name via the `$migrationsTable` property.
 
-## Catatan
+## Notes
 
-- Bergantung pada lingkungan CI (`get_instance()`, `show_error()`, dbforge) — bukan package standalone penuh.
-- Nomor versi harus integer berurutan; file tanpa prefiks angka diabaikan.
+- Depends on the CI environment (`get_instance()`, `show_error()`, dbforge) — not a fully standalone package.
+- Version numbers must be sequential integers; files without a numeric prefix are ignored.
 
-## Pengujian
+## Testing
 
 ```bash
 vendor/bin/phpunit --filter Migration
